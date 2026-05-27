@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ARCHETYPE // 企業研究・自己分析支援アプリ</title>
+  <!-- SEO Meta Tags -->
+  <meta name="description" content="就活生向け企業研究・自己分析統合プラットフォーム。価値観に合わせた相性スコア算出、AI要約、経営指標ダッシュボード、マイノートで納得感のあるキャリア選択をサポート。">
+  <meta name="theme-color" content="#1b365d">
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="style.css">
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Noto+Serif+JP:wght@400;600;700;900&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <!-- App Shell -->
+  <div class="app-container">
+    
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="header-logo">
+        <span class="logo-brand">ARCHETYPE</span>
+        <span class="logo-sub">// 企業研究と自己分析の統合</span>
+      </div>
+      <div class="header-actions">
+        <button id="theme-toggle" class="btn-icon" aria-label="テーマ切り替え">
+          <i data-lucide="moon"></i>
+        </button>
+        <span class="date-today" id="current-date">2026.05.27</span>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+      
+      <!-- VIEW: HOME (企業一覧 & リマインダー) -->
+      <section id="view-home" class="view-section active">
+        <!-- 今日・近日中のリマインダーエリア -->
+        <div class="editorial-hero">
+          <div class="hero-outline">
+            <span class="editorial-tag">Schedule & Alerts</span>
+            <h2 class="editorial-title">直近の選考スケジュール</h2>
+            <div id="quick-reminders" class="reminder-container">
+              <!-- JSで動的にリマインダーを挿入 -->
+              <p class="empty-state">直近の締切や面接スケジュールはありません。</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 企業一覧のヘッダー・操作 -->
+        <div class="section-title-bar">
+          <h2 class="serif-title">企業ディレクトリ</h2>
+          <div class="sort-filter-group">
+            <select id="home-sort" class="select-editorial">
+              <option value="score">相性スコア順</option>
+              <option value="status">選考状況順</option>
+              <option value="name">企業名順</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 企業収集・登録の入力フォーム -->
+        <div class="search-collect-card">
+          <div class="card-headline">
+            <h3>新規企業データの収集・要約</h3>
+            <p>企業サイトやIR資料のURLを入力すると、AIが情報を瞬時に要約し追加します。</p>
+          </div>
+          <form id="url-collect-form" class="collect-form">
+            <div class="input-group-row">
+              <input type="text" id="collect-company-name" placeholder="企業名（例: 未来インダストリー）" required class="input-editorial">
+              <input type="url" id="collect-company-url" placeholder="企業サイトまたはIRのURL" required class="input-editorial">
+              <button type="submit" class="btn-editorial primary">
+                <i data-lucide="sparkles"></i> <span>解析・追加</span>
+              </button>
+            </div>
+          </form>
+          <!-- 解析ローディングアニメーション -->
+          <div id="collect-loading" class="collect-loading hidden">
+            <div class="spinner-editorial"></div>
+            <p>AIが公式IRおよび口コミデータベースから情報を抽出・要約中...</p>
+          </div>
+        </div>
+
+        <!-- 企業カードリスト -->
+        <div class="company-grid" id="company-card-list">
+          <!-- JSで動的にレンダリング -->
+        </div>
+      </section>
+
+      <!-- VIEW: SELF ANALYSIS (自己分析) -->
+      <section id="view-self" class="view-section">
+        <div class="editorial-hero">
+          <div class="hero-outline">
+            <span class="editorial-tag">Self Analysis</span>
+            <h2 class="editorial-title">自己価値観の重み付け</h2>
+            <p class="editorial-lead">あなたが企業選びで重視する5つの軸を設定してください。この重み付けが企業の相性スコアにリアルタイムで反映されます。</p>
+          </div>
+        </div>
+
+        <div class="card-editorial analysis-panel">
+          <form id="self-analysis-form">
+            <div class="values-sliders-group">
+              
+              <!-- 成長環境 -->
+              <div class="slider-item">
+                <div class="slider-labels">
+                  <span class="value-name"><i data-lucide="trending-up"></i> 成長環境</span>
+                  <span class="value-percentage" id="val-pct-growth">20%</span>
+                </div>
+                <p class="slider-desc">若手からの裁量、スキルアップの機会、挑戦的な風土</p>
+                <input type="range" id="slider-growth" min="0" max="100" value="20" class="slider-editorial">
+              </div>
+
+              <!-- 安定性 -->
+              <div class="slider-item">
+                <div class="slider-labels">
+                  <span class="value-name"><i data-lucide="shield"></i> 安定性・経営基盤</span>
+                  <span class="value-percentage" id="val-pct-stability">20%</span>
+                </div>
+                <p class="slider-desc">福利厚生、業界シェア、財務健全性、終身雇用の風土</p>
+                <input type="range" id="slider-stability" min="0" max="100" value="20" class="slider-editorial">
+              </div>
+
+              <!-- 裁量・自由度 -->
+              <div class="slider-item">
+                <div class="slider-labels">
+                  <span class="value-name"><i data-lucide="unlock"></i> 裁量・働き方の自由</span>
+                  <span class="value-percentage" id="val-pct-autonomy">20%</span>
+                </div>
+                <p class="slider-desc">リモートワーク率、フレックス制、意思決定スピード</p>
+                <input type="range" id="slider-autonomy" min="0" max="100" value="20" class="slider-editorial">
+              </div>
+
+              <!-- チーム・社風 -->
+              <div class="slider-item">
+                <div class="slider-labels">
+                  <span class="value-name"><i data-lucide="users"></i> 協調性・チームワーク</span>
+                  <span class="value-percentage" id="val-pct-team">20%</span>
+                </div>
+                <p class="slider-desc">温和な社員、コラボレーション重視、フラットな対話</p>
+                <input type="range" id="slider-team" min="0" max="100" value="20" class="slider-editorial">
+              </div>
+
+              <!-- 給与・待遇 -->
+              <div class="slider-item">
+                <div class="slider-labels">
+                  <span class="value-name"><i data-lucide="coins"></i> 給与・待遇水準</span>
+                  <span class="value-percentage" id="val-pct-salary">20%</span>
+                </div>
+                <p class="slider-desc">平均年収、ボーナス比率、評価の明確さ</p>
+                <input type="range" id="slider-salary" min="0" max="100" value="20" class="slider-editorial">
+              </div>
+
+            </div>
+
+            <!-- 合計調整の警告/ステータス -->
+            <div class="total-status-bar" id="slider-total-bar">
+              <span class="total-label">配分合計: <strong id="slider-total-val">100%</strong></span>
+              <span class="total-message" id="slider-total-msg">理想的なバランスです。</span>
+            </div>
+
+            <!-- 自由記述入力 -->
+            <div class="editorial-divider"></div>
+            
+            <div class="textarea-group">
+              <label for="self-vision" class="label-editorial">自己の強み・キャリアビジョン (自由記述)</label>
+              <textarea id="self-vision" class="textarea-editorial" rows="4" placeholder="例：顧客と深く関わりながら、技術的な知見を活かして課題解決を行いたい。若手のうちから主担当としてプロジェクトを牽引したい。"></textarea>
+            </div>
+
+            <div class="textarea-group">
+              <label for="self-avoid" class="label-editorial">絶対に避けたい就活軸・風土 (自由記述)</label>
+              <textarea id="self-avoid" class="textarea-editorial" rows="3" placeholder="例：過度なノルマ競争がある環境や、上意下達が厳しすぎる企業文化は避けたい。"></textarea>
+            </div>
+
+            <div class="form-actions">
+              <button type="button" id="save-analysis" class="btn-editorial primary block">
+                <i data-lucide="check"></i> 自己分析を保存し相性スコアを更新
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- VIEW: COMPARE (カスタム比較) -->
+      <section id="view-compare" class="view-section">
+        <div class="editorial-hero">
+          <div class="hero-outline">
+            <span class="editorial-tag">Custom Comparison</span>
+            <h2 class="editorial-title">企業カスタム比較</h2>
+            <p class="editorial-lead">登録した企業から最大3社を並べて比較します。重視軸の重みを設定し、あなたに最適な意思決定のヒントを提示します。</p>
+          </div>
+        </div>
+
+        <!-- 企業選択パネル -->
+        <div class="compare-selector-bar">
+          <div class="selector-container">
+            <span class="select-label">比較対象を選択:</span>
+            <div class="checkbox-group" id="compare-checkboxes">
+              <!-- JSで動的にチェックボックスを生成 -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 重み付け調整（比較画面用クイック調整） -->
+        <div class="compare-weight-card card-editorial">
+          <h4>比較用の重視軸重み付け (合計100%)</h4>
+          <div class="compare-weights-grid" id="compare-weights-sliders">
+            <!-- JSでスライダーを生成して瞬時に比較表に反映 -->
+          </div>
+        </div>
+
+        <!-- 比較テーブルコンテナ -->
+        <div class="comparison-table-container">
+          <table class="editorial-table" id="comparison-table">
+            <!-- JSで動的に描画 -->
+          </table>
+        </div>
+
+        <!-- AI差分アドバイザー -->
+        <div class="card-editorial diff-advisor-card" id="comparison-advisor">
+          <div class="advisor-header">
+            <i data-lucide="award" class="icon-gold"></i>
+            <h3>迷ったときの決め手 — AI差分分析</h3>
+          </div>
+          <div class="advisor-body" id="comparison-advisor-content">
+            <p class="empty-state">比較する企業を2社以上選択すると、詳細な差分とアドバイスが生成されます。</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: COMPANY DETAIL (企業詳細 - タブ切り替え) -->
+      <section id="view-detail" class="view-section">
+        <!-- 詳細ヘッダー -->
+        <div class="detail-header-editorial" id="detail-header-area">
+          <!-- JSで動的に挿入 -->
+        </div>
+
+        <!-- タブナビゲーション -->
+        <div class="editorial-tabs">
+          <button class="tab-btn active" data-tab="tab-summary">
+            <i data-lucide="text-quote"></i> AI要約・分析
+          </button>
+          <button class="tab-btn" data-tab="tab-dashboard">
+            <i data-lucide="bar-chart-3"></i> 経営健全性
+          </button>
+          <button class="tab-btn" data-tab="tab-notes">
+            <i data-lucide="notebook"></i> 企業ノート・選考管理
+          </button>
+        </div>
+
+        <!-- TAB CONTENT: SUMMARY -->
+        <div id="tab-summary" class="tab-content active">
+          <!-- 3行サマリー -->
+          <div class="editorial-quote-box">
+            <span class="quote-tag">3-Line Summary</span>
+            <ol class="summary-list-editorial" id="detail-3line-summary">
+              <!-- JS -->
+            </ol>
+          </div>
+
+          <!-- 詳細＆ハイライト情報 -->
+          <div class="detail-grid">
+            <div class="detail-main-text">
+              <h3 class="serif-sub-title">企業情報と主要トピックス</h3>
+              <div class="editorial-article-body" id="detail-full-summary">
+                <!-- JS -->
+              </div>
+            </div>
+            
+            <div class="detail-sidebar-box">
+              <div class="serif-box">
+                <h4>求める人材像</h4>
+                <p id="detail-ideal-candidate" class="editorial-italic-text">
+                  <!-- JS -->
+                </p>
+              </div>
+              <div class="value-radar-box">
+                <h4>企業バリュー特性</h4>
+                <div class="mini-bar-chart-container" id="detail-value-bars">
+                  <!-- JS -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB CONTENT: DASHBOARD -->
+        <div id="tab-dashboard" class="tab-content">
+          <div class="dashboard-hero-stat" id="dashboard-one-liner-box">
+            <span class="stat-tag">一言でわかる健全性</span>
+            <h2 class="stat-highlight" id="dashboard-one-liner">業界トップシェア、3年で売上1.5倍。</h2>
+          </div>
+
+          <div class="dashboard-grid">
+            <!-- 業績グラフ -->
+            <div class="card-editorial chart-card">
+              <h3>業績推移 (売上・営業利益)</h3>
+              <div class="chart-wrapper">
+                <canvas id="financialChart"></canvas>
+              </div>
+            </div>
+
+            <!-- 業界内ポジション -->
+            <div class="card-editorial chart-card">
+              <h3>業界内売上シェア（競合比較）</h3>
+              <div class="chart-wrapper">
+                <canvas id="marketShareChart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- 雇用・組織健全性指標 -->
+          <div class="section-title-bar mini">
+            <h3 class="serif-title">組織健全性指標</h3>
+          </div>
+
+          <div class="stats-cards-grid">
+            <div class="stat-card-editorial">
+              <span class="label">新卒3年以内離職率</span>
+              <div class="stat-value-container">
+                <span class="number-serif" id="stat-turnover">4.2%</span>
+                <span class="comparison-tag good">低水準</span>
+              </div>
+              <div class="meter-bar"><div class="meter-fill" id="meter-turnover" style="width: 4.2%"></div></div>
+            </div>
+
+            <div class="stat-card-editorial">
+              <span class="label">平均勤続年数</span>
+              <div class="stat-value-container">
+                <span class="number-serif" id="stat-tenure">14.5年</span>
+                <span class="comparison-tag">業界平均以上</span>
+              </div>
+              <div class="meter-bar"><div class="meter-fill" id="meter-tenure" style="width: 72.5%"></div></div>
+            </div>
+
+            <div class="stat-card-editorial">
+              <span class="label">平均年齢</span>
+              <div class="stat-value-container">
+                <span class="number-serif" id="stat-age">38.2歳</span>
+              </div>
+              <div class="meter-bar"><div class="meter-fill" id="meter-age" style="width: 55%"></div></div>
+            </div>
+
+            <div class="stat-card-editorial">
+              <span class="label">男女比率 (女性比率)</span>
+              <div class="stat-value-container">
+                <span class="number-serif" id="stat-gender-ratio">38%</span>
+                <span class="comparison-tag">業界平均 25%</span>
+              </div>
+              <div class="meter-bar"><div class="meter-fill" id="meter-gender" style="width: 38%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB CONTENT: NOTES -->
+        <div id="tab-notes" class="tab-content">
+          <div class="notes-dashboard-grid">
+            <!-- 選考ステータス管理 -->
+            <div class="card-editorial">
+              <h3>選考ステータス・評価</h3>
+              <form id="notes-status-form" class="notes-form">
+                <div class="input-group-row-split">
+                  <div class="input-block">
+                    <label class="label-editorial" for="note-status-select">現在の選考状況</label>
+                    <select id="note-status-select" class="select-editorial">
+                      <option value="検討中">検討中</option>
+                      <option value="ES提出前">ES提出前 (作成中)</option>
+                      <option value="ES提出済">ES提出済</option>
+                      <option value="一次面接">一次面接</option>
+                      <option value="二次面接">二次面接 / 複数面接</option>
+                      <option value="最終面接">最終面接</option>
+                      <option value="内定">内定</option>
+                      <option value="選考辞退">選考辞退 / お祈り</option>
+                    </select>
+                  </div>
+                  <div class="input-block">
+                    <label class="label-editorial" for="note-rating-select">個人的な志望度 (星5つ)</label>
+                    <select id="note-rating-select" class="select-editorial">
+                      <option value="5">★★★★★ (第一志望群)</option>
+                      <option value="4">★★★★☆ (有力候補)</option>
+                      <option value="3">★★★☆☆ (キープ)</option>
+                      <option value="2">★★☆☆☆ (検討中)</option>
+                      <option value="1">★☆☆☆☆ (志望度低め)</option>
+                    </select>
+                  </div>
+                </div>
+              </form>
+            </div>
+
+            <!-- スケジュール・締切登録 -->
+            <div class="card-editorial">
+              <h3>選考スケジュール・締切の登録</h3>
+              <form id="schedule-add-form" class="notes-form">
+                <div class="input-group-row">
+                  <input type="date" id="schedule-date" required class="input-editorial">
+                  <input type="text" id="schedule-title" placeholder="イベント（例：ES締切、一次面接）" required class="input-editorial">
+                  <button type="submit" class="btn-editorial secondary">
+                    <i data-lucide="plus"></i> <span>日程追加</span>
+                  </button>
+                </div>
+              </form>
+
+              <!-- 個別企業のスケジュールタイムライン -->
+              <div class="company-timeline" id="company-schedule-list">
+                <!-- JSで動的に描画 -->
+              </div>
+            </div>
+          </div>
+
+          <!-- 感想・訪問メモ・気づき -->
+          <div class="card-editorial notebook-card">
+            <div class="notebook-header">
+              <h3>マイ企業メモ</h3>
+              <span class="save-status" id="memo-save-status">自動保存済み</span>
+            </div>
+            
+            <div class="notebook-editors">
+              <div class="notebook-section">
+                <label for="memo-feelings" class="label-editorial"><i data-lucide="pen-tool"></i> 企業に対する率直な感想・魅力</label>
+                <textarea id="memo-feelings" class="textarea-editorial font-article" rows="3" placeholder="説明会やサイトを通じて感じたこと、社風が自分に合いそうかなどを自由に記載。"></textarea>
+              </div>
+
+              <div class="notebook-section">
+                <label for="memo-ob" class="label-editorial"><i data-lucide="users"></i> OB・OG訪問 / 社員座談会のメモ</label>
+                <textarea id="memo-ob" class="textarea-editorial font-article" rows="3" placeholder="社員の雰囲気、現場のリアルな働き方、質問したことと回答など。"></textarea>
+              </div>
+
+              <div class="notebook-section">
+                <label for="memo-briefing" class="label-editorial"><i data-lucide="info"></i> 説明会・インターンシップでの気づき</label>
+                <textarea id="memo-briefing" class="textarea-editorial font-article" rows="3" placeholder="新規事業の方向性、入社後の配属リスク、強みとしてアピールできそうなエピソードなど。"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Navigation Bar (Mobile Native Look & Feel) -->
+    <nav class="app-navigation">
+      <button class="nav-item active" id="nav-btn-home" aria-label="企業一覧">
+        <i data-lucide="building-2"></i>
+        <span>企業ディレクトリ</span>
+      </button>
+      <button class="nav-item" id="nav-btn-self" aria-label="自己分析">
+        <i data-lucide="user-check"></i>
+        <span>自己分析</span>
+      </button>
+      <button class="nav-item" id="nav-btn-compare" aria-label="カスタム比較">
+        <i data-lucide="columns-3"></i>
+        <span>カスタム比較</span>
+      </button>
+    </nav>
+
+  </div>
+
+</body>
+</html>

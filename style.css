@@ -1504,3 +1504,47 @@ button, input, select, textarea {
     font-size: 2.2rem;
   }
 }
+
+/* --- EXTRA CUSTOM STYLES (Mock Warning & Sources) --- */
+.mock-warning-tag {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--accent-secondary);
+  font-style: italic;
+  margin-right: 1.5rem;
+  display: inline-block;
+}
+
+.sources-list-box {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--border-color);
+}
+
+.sources-single-box {
+  margin-top: 1.5rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--accent-bg);
+  border-left: 2px solid var(--accent-primary);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.badge-source {
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  background-color: var(--accent-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  text-decoration: none;
+  margin-right: 0.5rem;
+  margin-top: 0.25rem;
+  font-family: var(--font-sans);
+}
+
+.badge-source:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+

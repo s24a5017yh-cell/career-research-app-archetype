@@ -210,7 +210,13 @@ function calculateCompatibility(companyValues, userWeights) {
   
   for (const axis in userWeights) {
     const weight = userWeights[axis];
-    const companyVal = companyValues[axis] || 50; // default to 50 if missing
+    const companyVal = companyValues[axis];
+    
+    // データがない (null または undefined) の場合は、この軸を計算から除外する
+    if (companyVal === null || companyVal === undefined) {
+      continue;
+    }
+    
     scoreSum += companyVal * weight;
     weightSum += weight;
   }
@@ -826,11 +832,18 @@ function openCompanyDetail(companyId, targetTab = "tab-summary") {
   const score = calculateCompatibility(comp.values, state.userValues);
   const reasoning = generateReasoningText(comp, state.userValues);
   
+  // モック警告文
+  const isMock = !comp.isRealData;
+  const mockWarningHtml = isMock 
+    ? `<div class="mock-warning-tag" style="margin-top:0.25rem;">* この企業データはテスト用の架空モックデータです</div>` 
+    : '';
+
   headerArea.innerHTML = `
     <div class="detail-headline-group">
       <div class="detail-comp-meta">
         <span class="detail-industry-tag">${comp.industry}</span>
         <h1 class="detail-company-title">${comp.name}</h1>
+        ${mockWarningHtml}
       </div>
       <div class="detail-score-box">
         <div class="detail-score-circle">
@@ -848,37 +861,75 @@ function openCompanyDetail(companyId, targetTab = "tab-summary") {
   const listSummary = document.getElementById("detail-3line-summary");
   listSummary.innerHTML = comp.summary3.map(li => `<li>${li}</li>`).join("");
 
+  // 出典情報の描画
+  const summarySourcesContainer = document.getElementById("summary-sources-container");
+  const detailSourcesContainer = document.getElementById("detail-sources-container");
+  const idealSourcesContainer = document.getElementById("ideal-sources-container");
+
+  if (comp.sources) {
+    summarySourcesContainer.innerHTML = `
+      <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">
+        <strong>サマリーの出典:</strong> ${comp.sources.summary3.map(s => `<span class="badge-source">${s}</span>`).join("")}
+      </div>
+    `;
+    detailSourcesContainer.innerHTML = `
+      <strong>詳細要約の出典:</strong> <span class="badge-source">${comp.sources.fullSummary}</span>
+    `;
+    detailSourcesContainer.style.display = "block";
+    
+    idealSourcesContainer.innerHTML = `
+      <strong>出典:</strong> <span class="badge-source">${comp.sources.idealCandidate}</span>
+    `;
+    idealSourcesContainer.style.display = "block";
+  } else {
+    // プリセット企業など出典がない場合
+    summarySourcesContainer.innerHTML = '';
+    detailSourcesContainer.style.display = "none";
+    idealSourcesContainer.style.display = "none";
+  }
+
   document.getElementById("detail-full-summary").innerHTML = comp.fullSummary;
   document.getElementById("detail-ideal-candidate").textContent = comp.idealCandidate;
 
   // Value characteristics bars on Summary Sidebar
   const barContainer = document.getElementById("detail-value-bars");
   const axisLabels = { growth: "成長環境", stability: "安定基盤", autonomy: "裁量自由", team: "協調社風", salary: "給与待遇" };
-  barContainer.innerHTML = Object.keys(comp.values).map(axis => `
-    <div class="mini-bar-item">
-      <div class="lbl">
-        <span>${axisLabels[axis]}</span>
-        <span>${comp.values[axis]}%</span>
+  barContainer.innerHTML = Object.keys(comp.values).map(axis => {
+    const val = comp.values[axis];
+    const valText = val !== null ? `${val}%` : 'データなし';
+    const barWidth = val !== null ? `${val}%` : '0%';
+    return `
+      <div class="mini-bar-item">
+        <div class="lbl">
+          <span>${axisLabels[axis]}</span>
+          <span>${valText}</span>
+        </div>
+        <div class="bar-outer">
+          <div class="bar-inner" style="width: ${barWidth}"></div>
+        </div>
       </div>
-      <div class="bar-outer">
-        <div class="bar-inner" style="width: ${comp.values[axis]}%"></div>
-      </div>
-    </div>
-  `).join("");
+    `;
+  }).join("");
 
   // Tab: Dashboard Content
-  document.getElementById("dashboard-one-liner").textContent = comp.metrics.oneLiner;
-  document.getElementById("stat-turnover").textContent = comp.metrics.turnover;
-  document.getElementById("stat-tenure").textContent = comp.metrics.tenure;
-  document.getElementById("stat-age").textContent = comp.metrics.age;
-  document.getElementById("stat-gender-ratio").textContent = comp.metrics.genderRatio;
+  document.getElementById("dashboard-one-liner").textContent = comp.metrics.oneLiner || "一次情報データなし。";
+  document.getElementById("stat-turnover").textContent = comp.metrics.turnover || "データなし";
+  document.getElementById("stat-tenure").textContent = comp.metrics.tenure || "データなし";
+  document.getElementById("stat-age").textContent = comp.metrics.age || "データなし";
+  document.getElementById("stat-gender-ratio").textContent = comp.metrics.genderRatio || "データなし";
 
   // Adjust custom comparison badges dynamically
-  const isTurnoverGood = parseFloat(comp.metrics.turnover) < 4.0;
+  const turnoverVal = parseFloat(comp.metrics.turnover);
   const turnoverTag = document.querySelector("#stat-turnover + .comparison-tag");
   if (turnoverTag) {
-    turnoverTag.textContent = isTurnoverGood ? "超低水準 (優)" : "業界標準水準";
-    turnoverTag.className = `comparison-tag ${isTurnoverGood ? 'good' : ''}`;
+    if (isNaN(turnoverVal)) {
+      turnoverTag.style.display = "none";
+    } else {
+      turnoverTag.style.display = "inline-block";
+      const isTurnoverGood = turnoverVal < 4.0;
+      turnoverTag.textContent = isTurnoverGood ? "超低水準 (優)" : "業界標準水準";
+      turnoverTag.className = `comparison-tag ${isTurnoverGood ? 'good' : ''}`;
+    }
   }
 
   // Render Charts in Dashboard Tab
@@ -1229,11 +1280,13 @@ function setupEventListeners() {
     renderHomeReminders();
   });
 
-  // New Corporate AI collect simulator
+  // New Corporate AI collect API integration
   document.getElementById("url-collect-form").addEventListener("submit", (e) => {
     e.preventDefault();
     const name = document.getElementById("collect-company-name").value.trim();
     const url = document.getElementById("collect-company-url").value.trim();
+    const codeEl = document.getElementById("collect-company-code");
+    const securityCode = codeEl ? codeEl.value.trim() : "";
     
     const loadingEl = document.getElementById("collect-loading");
     loadingEl.classList.remove("hidden");
@@ -1242,62 +1295,26 @@ function setupEventListeners() {
     const submitBtn = document.querySelector("#url-collect-form button[type='submit']");
     submitBtn.disabled = true;
 
-    // Simulate LLM analytical pipeline delay (2.5 seconds)
-    setTimeout(() => {
-      // Create new dynamic mock corporate profile based on dynamic calculations
-      const randomId = "custom-" + Math.random().toString(36).substr(2, 9);
-      
-      // Distribute random balance points for Dynamic Custom corporate profile values
-      const valG = Math.floor(Math.random() * 40) + 55;
-      const valS = Math.floor(Math.random() * 40) + 50;
-      const valA = Math.floor(Math.random() * 40) + 50;
-      const valT = Math.floor(Math.random() * 40) + 55;
-      const valSal = Math.floor(Math.random() * 45) + 50;
-
-      const newCompany = {
-        id: randomId,
-        name: name,
-        industry: "IT・コンサルティング / 新興企業",
-        url: url,
-        summary3: [
-          `AIを活用した生産性向上サービスを提供する注目ベンチャー企業：${name}。`,
-          "少数精鋭体制を掲げており、主体性とロジカルシンキングが強く求められる風土。",
-          "個人の自律性を徹底重視し、自己表現力と行動力のある人材にとって最高の舞台。"
-        ],
-        fullSummary: `
-          <p>新しくAIが要約・収集したデータです。${name}はデジタルテクノロジーを駆使して新たな社会的バリューを創造することを目指すイノベーター集団です。</p>
-          <p>公式プレスリリースおよび口コミサイト等から抽出した情報によると、<span class="highlight-yellow">一人ひとりの裁量と自律したキャリア形成</span>に最大の魅力があります。短期間でのスキル成長を目指す環境として、新卒生からの関心も高まりつつあります。</p>
-          <p>雇用面では、安定したマニュアル型業務よりも<span class="highlight-blue">「不確実性を楽しみながらイノベーションを起こす」</span>という社風であり、求める人物像とも密接に結びついています。</p>
-        `,
-        idealCandidate: "新しいサービスを生み出すエネルギーがあり、自ら率先して行動できる人。自分の意見を持ち、健全な議論を交わせる人。主体的に行動しキャリアを掴み取れる人。",
-        values: {
-          growth: valG,
-          stability: valS,
-          autonomy: valA,
-          team: valT,
-          salary: valSal
-        },
-        metrics: {
-          turnover: "3.5%",
-          tenure: "3.8年",
-          age: "31.2歳",
-          genderRatio: "35%",
-          oneLiner: "業界内で急成長を遂げる注目株。少数精鋭のプロフェッショナル集団。"
-        },
-        financials: {
-          years: ["2022", "2023", "2024", "2025", "2026 (見込)"],
-          sales: [8.5, 14.2, 22.8, 38.0, 52.4],
-          profit: [0.6, 1.2, 2.1, 4.5, 6.8]
-        },
-        competitors: {
-          names: [name, "競合大手A社", "競合中堅B社", "新興ライバルC社"],
-          shares: [52.4, 210.0, 95.0, 32.0]
-        }
-      };
-
-      // Add to dynamic companies & state notes
+    // バックエンドの /api/collect APIを呼び出す
+    fetch("/api/collect", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ name, url, securityCode })
+    })
+    .then(response => {
+      if (!response.ok) {
+        return response.json().then(err => {
+          throw new Error(err.error || "データの解析に失敗しました。");
+        });
+      }
+      return response.json();
+    })
+    .then(newCompany => {
+      // 登録できた企業データを状態に追加
       state.companies.push(newCompany);
-      state.myNotes[randomId] = {
+      state.myNotes[newCompany.id] = {
         status: "検討中",
         rating: "3",
         feelings: "",
@@ -1308,17 +1325,24 @@ function setupEventListeners() {
 
       saveStateToLocalStorage();
       
-      // Reset form
+      // フォームリセット
       document.getElementById("collect-company-name").value = "";
       document.getElementById("collect-company-url").value = "";
+      if (codeEl) codeEl.value = "";
+      
       loadingEl.classList.add("hidden");
       submitBtn.disabled = false;
 
-      // Update grid
+      // ホーム画面のカード一覧を再描画
       renderCompanyCards();
-      alert(`「${name}」のWebサイトおよびIRデータから情報を収集し、無事に要約・相性スコア算出が完了しました！`);
-      
-    }, 2500);
+      alert(`「${name}」の実データ収集とAI要約が完了しました！`);
+    })
+    .catch(error => {
+      console.error(error);
+      loadingEl.classList.add("hidden");
+      submitBtn.disabled = false;
+      alert(`エラーが発生しました: ${error.message}\n\n※ローカルサーバーが起動しているか、また環境変数 GEMINI_API_KEY が正しく設定されているか確認してください。`);
+    });
   });
 }
 

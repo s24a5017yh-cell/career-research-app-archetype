@@ -58,6 +58,7 @@
         <div class="section-title-bar">
           <h2 class="serif-title">企業ディレクトリ</h2>
           <div class="sort-filter-group">
+            <span class="mock-warning-tag">* プリセット企業（DEFAULT_COMPANIES）はテスト用の架空データです</span>
             <select id="home-sort" class="select-editorial">
               <option value="score">相性スコア順</option>
               <option value="status">選考状況順</option>
@@ -70,12 +71,13 @@
         <div class="search-collect-card">
           <div class="card-headline">
             <h3>新規企業データの収集・要約</h3>
-            <p>企業サイトやIR資料のURLを入力すると、AIが情報を瞬時に要約し追加します。</p>
+            <p>企業サイトやIR資料のURLを入力すると、AIが情報を収集・解析して追加します。上場企業は証券コード（4桁）を入力すると、有価証券報告書等の一次情報から財務・組織データを直接取得します。</p>
           </div>
           <form id="url-collect-form" class="collect-form">
             <div class="input-group-row">
-              <input type="text" id="collect-company-name" placeholder="企業名（例: 未来インダストリー）" required class="input-editorial">
-              <input type="url" id="collect-company-url" placeholder="企業サイトまたはIRのURL" required class="input-editorial">
+              <input type="text" id="collect-company-name" placeholder="企業名（例: トヨタ自動車）" required class="input-editorial">
+              <input type="url" id="collect-company-url" placeholder="公式サイト/IR資料等のURL" required class="input-editorial">
+              <input type="text" id="collect-company-code" placeholder="証券コード4桁（任意）" class="input-editorial" maxlength="4" pattern="\d{4}">
               <button type="submit" class="btn-editorial primary">
                 <i data-lucide="sparkles"></i> <span>解析・追加</span>
               </button>
@@ -259,27 +261,36 @@
         <div id="tab-summary" class="tab-content active">
           <!-- 3行サマリー -->
           <div class="editorial-quote-box">
-            <span class="quote-tag">3-Line Summary</span>
+            <span class="quote-tag">3-Line Summary // AI要約（要確認）</span>
             <ol class="summary-list-editorial" id="detail-3line-summary">
               <!-- JS -->
             </ol>
+            <div id="summary-sources-container" class="sources-list-box">
+              <!-- JSで動的に出典を挿入 -->
+            </div>
           </div>
 
           <!-- 詳細＆ハイライト情報 -->
           <div class="detail-grid">
             <div class="detail-main-text">
-              <h3 class="serif-sub-title">企業情報と主要トピックス</h3>
+              <h3 class="serif-sub-title">企業情報と主要トピックス // AI要約（要確認）</h3>
               <div class="editorial-article-body" id="detail-full-summary">
                 <!-- JS -->
+              </div>
+              <div id="detail-sources-container" class="sources-single-box">
+                <!-- JSで動的に出典を挿入 -->
               </div>
             </div>
             
             <div class="detail-sidebar-box">
               <div class="serif-box">
-                <h4>求める人材像</h4>
+                <h4>求める人材像 // AI要約（要確認）</h4>
                 <p id="detail-ideal-candidate" class="editorial-italic-text">
                   <!-- JS -->
                 </p>
+                <div id="ideal-sources-container" class="sources-single-box">
+                  <!-- JSで動的に出典を挿入 -->
+                </div>
               </div>
               <div class="value-radar-box">
                 <h4>企業バリュー特性</h4>

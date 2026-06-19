@@ -1280,7 +1280,7 @@ function setupEventListeners() {
     renderHomeReminders();
   });
 
-  // New Corporate AI collect API integration
+  // New Corporate AI collect API integration (Scrape -> Gemini Direct Client)
   document.getElementById("url-collect-form").addEventListener("submit", (e) => {
     e.preventDefault();
     const name = document.getElementById("collect-company-name").value.trim();
@@ -1288,62 +1288,348 @@ function setupEventListeners() {
     const codeEl = document.getElementById("collect-company-code");
     const securityCode = codeEl ? codeEl.value.trim() : "";
     
+    // APIキーの存在チェック
+    const apiKey = localStorage.getItem("gemini_api_key");
+    if (!apiKey) {
+      alert("AI解析を実行するにはGemini APIキーの設定が必要です。ヘッダーの鍵アイコン(🔑)またはガイドから設定を行ってください。");
+      document.getElementById("key-config-toggle").click(); // モーダルを自動で開く
+      return;
+    }
+
     const loadingEl = document.getElementById("collect-loading");
     loadingEl.classList.remove("hidden");
     
-    // Disable submit
     const submitBtn = document.querySelector("#url-collect-form button[type='submit']");
     submitBtn.disabled = true;
 
-    // バックエンドの /api/collect APIを呼び出す
-    fetch("/api/collect", {
+    // 1. CORS回避のため、ローカルのスクレイパーサーバーにリクエストして本文と一次情報を取得
+    fetch("/api/scrape", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ name, url, securityCode })
+      body: JSON.stringify({ url, securityCode })
     })
     .then(response => {
       if (!response.ok) {
         return response.json().then(err => {
-          throw new Error(err.error || "データの解析に失敗しました。");
+          throw new Error(err.error || "データのスクレイピングに失敗しました。");
         });
       }
       return response.json();
     })
-    .then(newCompany => {
-      // 登録できた企業データを状態に追加
-      state.companies.push(newCompany);
-      state.myNotes[newCompany.id] = {
-        status: "検討中",
-        rating: "3",
-        feelings: "",
-        ob: "",
-        briefing: "",
-        schedules: []
-      };
+    .then(data => {
+      // 2. 取得したテキストデータを元に、ブラウザから直接 Gemini API を呼び出す
+      return analyzeWithGeminiDirect(name, url, data.sourceText, data.scrapedMetrics, apiKey)
+        .then(aiAnalysis => {
+          const scrapedMetrics = data.scrapedMetrics || { financials: { sales: [] }, competitors: { names: [], shares: [] } };
+          
+          // スクレイピングで取得した確実な一次情報を、AIの出力より優先してマージ
+          const finalMetrics = {
+            turnover: scrapedMetrics.turnover || aiAnalysis.metrics.turnover || null,
+            tenure: scrapedMetrics.tenure || aiAnalysis.metrics.tenure || null,
+            age: scrapedMetrics.age || aiAnalysis.metrics.age || null,
+            genderRatio: scrapedMetrics.genderRatio || aiAnalysis.metrics.genderRatio || null,
+            salary: scrapedMetrics.salary || aiAnalysis.metrics.salary || null
+          };
 
-      saveStateToLocalStorage();
-      
-      // フォームリセット
-      document.getElementById("collect-company-name").value = "";
-      document.getElementById("collect-company-url").value = "";
-      if (codeEl) codeEl.value = "";
-      
-      loadingEl.classList.add("hidden");
-      submitBtn.disabled = false;
+          // 一言要約
+          let oneLiner = `${name}の企業研究情報。`;
+          if (scrapedMetrics.financials && scrapedMetrics.financials.sales && scrapedMetrics.financials.sales.length > 0) {
+            const sales = scrapedMetrics.financials.sales;
+            const latestSales = sales[sales.length - 1];
+            oneLiner = `直近売上高 ${latestSales}億円（一次情報源より取得）。`;
+          } else if (finalMetrics.salary) {
+            oneLiner = `平均年間給与 ${finalMetrics.salary}（一次情報源より取得）。`;
+          }
 
-      // ホーム画面のカード一覧を再描画
-      renderCompanyCards();
-      alert(`「${name}」の実データ収集とAI要約が完了しました！`);
+          const newCompany = {
+            id: `custom-${Math.random().toString(36).substr(2, 9)}`,
+            name: name,
+            industry: securityCode ? "上場企業" : "新興企業 / その他",
+            url: url,
+            summary3: aiAnalysis.summary3,
+            fullSummary: aiAnalysis.fullSummary,
+            idealCandidate: aiAnalysis.idealCandidate,
+            values: aiAnalysis.values,
+            metrics: {
+              turnover: finalMetrics.turnover,
+              tenure: finalMetrics.tenure,
+              age: finalMetrics.age,
+              genderRatio: finalMetrics.genderRatio,
+              salary: finalMetrics.salary,
+              oneLiner: oneLiner
+            },
+            financials: scrapedMetrics.financials && scrapedMetrics.financials.years && scrapedMetrics.financials.years.length > 0 ? scrapedMetrics.financials : {
+              years: ["データなし"],
+              sales: [0],
+              profit: [0]
+            },
+            competitors: scrapedMetrics.financials && scrapedMetrics.financials.years && scrapedMetrics.financials.years.length > 0 ? scrapedMetrics.competitors : {
+              names: [name],
+              shares: [0]
+            },
+            sources: aiAnalysis.sources,
+            isRealData: true
+          };
+
+          state.companies.push(newCompany);
+          state.myNotes[newCompany.id] = {
+            status: "検討中",
+            rating: "3",
+            feelings: "",
+            ob: "",
+            briefing: "",
+            schedules: []
+          };
+
+          saveStateToLocalStorage();
+          
+          document.getElementById("collect-company-name").value = "";
+          document.getElementById("collect-company-url").value = "";
+          if (codeEl) codeEl.value = "";
+          
+          loadingEl.classList.add("hidden");
+          submitBtn.disabled = false;
+
+          renderCompanyCards();
+          alert(`「${name}」の実データ取得およびAI要約が完了しました！`);
+        });
     })
     .catch(error => {
       console.error(error);
       loadingEl.classList.add("hidden");
       submitBtn.disabled = false;
-      alert(`エラーが発生しました: ${error.message}\n\n※ローカルサーバーが起動しているか、また環境変数 GEMINI_API_KEY が正しく設定されているか確認してください。`);
+      alert(`エラーが発生しました: ${error.message}\n\n※ローカルサーバーが起動していること、および有効なAPIキーが設定されていることを確認してください。`);
     });
   });
+}
+
+// --- Gemini API Schema & Direct Browser Client ---
+const geminiJsonSchema = {
+  type: "OBJECT",
+  properties: {
+    summary3: {
+      type: "ARRAY",
+      items: { type: "STRING" },
+      description: "企業に関する3行の重要サマリー。事実のみで構成し、推測や勝手な創作は含めないこと。各サマリーの末尾には必ず [出典:資料名やURL] を付与すること。"
+    },
+    fullSummary: {
+      type: "STRING",
+      description: "企業の詳細な紹介。HTMLのpタグやspanタグを用い、重要な一次情報には <span class=\"highlight-yellow\"></span> などのハイライトを適用すること。各記述には必ず具体的な出典を明記すること。"
+    },
+    idealCandidate: {
+      type: "STRING",
+      description: "この企業が求める人材像。テキストに記載されているもののみ抽出し、推測は含めないこと。末尾に出典を明記すること。"
+    },
+    values: {
+      type: "OBJECT",
+      properties: {
+        growth: { type: "INTEGER", description: "成長環境の適合度 (0-100)。テキストに根拠がない場合は null にすること。" },
+        stability: { type: "INTEGER", description: "安定性の適合度 (0-100)。テキストに根拠がない場合は null にすること。" },
+        autonomy: { type: "INTEGER", description: "裁量・自由度の適合度 (0-100)。テキストに根拠がない場合は null にすること。" },
+        team: { type: "INTEGER", description: "協調性・チームワークの適合度 (0-100)。テキストに根拠がない場合は null にすること。" },
+        salary: { type: "INTEGER", description: "給与・待遇水準の適合度 (0-100)。テキストに根拠がない場合は null にすること。" }
+      },
+      required: ["growth", "stability", "autonomy", "team", "salary"]
+    },
+    metrics: {
+      type: "OBJECT",
+      properties: {
+        turnover: { type: "STRING", description: "新卒3年以内離職率 (例: '4.2%')。記載がない場合は null にすること。" },
+        tenure: { type: "STRING", description: "平均勤続年数 (例: '14.5年')。記載がない場合は null にすること。" },
+        age: { type: "STRING", description: "平均年齢 (例: '38.2歳')。記載がない場合は null にすること。" },
+        genderRatio: { type: "STRING", description: "女性比率 (例: '38%')。記載がない場合は null にすること。" },
+        salary: { type: "STRING", description: "平均年間給与 (例: '895万円')。記載がない場合は null にすること。" }
+      },
+      required: ["turnover", "tenure", "age", "genderRatio", "salary"]
+    },
+    sources: {
+      type: "OBJECT",
+      properties: {
+        summary3: { type: "ARRAY", items: { type: "STRING" }, description: "3行サマリーそれぞれの具体的な出典" },
+        fullSummary: { type: "STRING", description: "詳細要約の主な出典" },
+        idealCandidate: { type: "STRING", description: "求める人材像の具体的な出典" },
+        metrics: { type: "STRING", description: "組織指標（離職率、年収など）の出典" }
+      },
+      required: ["summary3", "fullSummary", "idealCandidate", "metrics"]
+    }
+  },
+  required: ["summary3", "fullSummary", "idealCandidate", "values", "metrics", "sources"]
+};
+
+// ブラウザから直接 Gemini API を呼び出す関数
+async function analyzeWithGeminiDirect(companyName, url, sourceText, scrapedMetrics, apiKey) {
+  const scrapedContext = JSON.stringify(scrapedMetrics, null, 2);
+  const prompt = `
+あなたは企業情報の客観的分析を行う専門AIです。
+入力された企業の「ソーステキスト」および「すでに判明している一次情報数値」をもとに、厳格に事実のみに基づいた要約を作成してください。
+
+【対象企業】: ${companyName}
+【ソースURL】: ${url}
+【すでに判明している一次情報数値（絶対に優先し、捏造しないこと）】:
+${scrapedContext}
+
+【ソーステキスト】:
+${sourceText}
+
+【厳格な遵守ルール】:
+1. あなたの事前知識や憶測から、数値を絶対に推測・ハルシネーション（捏造）しないでください。
+2. 平均年収、平均勤続年数、平均年齢、離職率、売上高などの数値情報は、ソーステキストまたは「判明している一次情報数値」に明記されている場合のみ出力してください。記載がない項目は、絶対に推測せず 'null' または記載なしにしてください。
+3. 事実（実際に確認された数値や実績）と、推測（会社の目指すビジョンや将来の予測）を明確に区別し、曖昧な箇所は「AIによる推測（要確認）」であることを付記してください。
+4. 各要約、求める人材像、指標など、あらゆる記述箇所に対して、元の情報の出典（例: 『有価証券報告書 p.12』『公式サイト〇〇ページ』またはURL）を紐付けて出力してください。
+5. 出力は指定されたJSONスキーマに完全に準拠させ、プレーンなJSONオブジェクトとして返却してください。マークダウンブロック (\`\`\`json ...) は不要です。
+`;
+
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [{ text: prompt }]
+          }
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: geminiJsonSchema
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error?.message || "Gemini APIからのエラー応答を受信しました。");
+    }
+
+    const resData = await response.json();
+    const candidates = resData?.candidates;
+    if (!candidates || candidates.length === 0) {
+      throw new Error("Gemini API から有効な応答が得られませんでした。");
+    }
+
+    const jsonText = candidates[0].content?.parts[0]?.text;
+    const parsedData = JSON.parse(jsonText);
+    return parsedData;
+  } catch (error) {
+    console.error("Gemini Direct Error:", error);
+    throw new Error(`AI要約の生成に失敗しました: ${error.message}`);
+  }
+}
+
+// APIキーの有効性検証を行う関数
+async function validateApiKey(key) {
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: "Hello. Respond with ONLY the single word 'OK'." }] }]
+      })
+    });
+    
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error?.message || "接続エラーまたは無効なキーです。");
+    }
+    
+    const data = await response.json();
+    return true;
+  } catch (error) {
+    console.error("API Key Verification Failed:", error);
+    throw error;
+  }
+}
+
+// モーダルの挙動制御・初回セットアップガイド
+function initApiKeyModal() {
+  const modal = document.getElementById("api-key-modal");
+  const toggleBtn = document.getElementById("key-config-toggle");
+  const closeBtn = document.getElementById("close-modal-btn");
+  const form = document.getElementById("api-key-form");
+  const input = document.getElementById("input-api-key");
+  const statusBox = document.getElementById("key-validation-status");
+  const deleteBtn = document.getElementById("delete-api-key-btn");
+  const saveBtn = document.getElementById("save-api-key-btn");
+
+  if (!modal || !toggleBtn || !closeBtn) return;
+
+  function openModal() {
+    modal.classList.remove("hidden");
+    const savedKey = localStorage.getItem("gemini_api_key");
+    if (savedKey) {
+      input.value = savedKey;
+      deleteBtn.classList.remove("hidden");
+    } else {
+      input.value = "";
+      deleteBtn.classList.add("hidden");
+    }
+    statusBox.className = "validation-status-box hidden";
+    statusBox.textContent = "";
+  }
+
+  function closeModal() {
+    modal.classList.add("hidden");
+  }
+
+  toggleBtn.addEventListener("click", openModal);
+  closeBtn.addEventListener("click", closeModal);
+
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
+
+  // キー削除
+  deleteBtn.addEventListener("click", () => {
+    if (confirm("APIキーをブラウザから削除しますか？削除するとAI要約機能が使用できなくなります。")) {
+      localStorage.removeItem("gemini_api_key");
+      input.value = "";
+      deleteBtn.classList.add("hidden");
+      statusBox.className = "validation-status-box success";
+      statusBox.textContent = "APIキーを削除しました。";
+      setTimeout(closeModal, 1500);
+    }
+  });
+
+  // 検証して保存
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const key = input.value.trim();
+    if (!key) return;
+
+    statusBox.className = "validation-status-box loading";
+    statusBox.textContent = "Google AI Studio サーバーに接続して検証中...";
+    statusBox.classList.remove("hidden");
+    saveBtn.disabled = true;
+
+    validateApiKey(key)
+      .then(() => {
+        localStorage.setItem("gemini_api_key", key);
+        statusBox.className = "validation-status-box success";
+        statusBox.textContent = "✓ 有効なキーです！設定をブラウザに保存しました。";
+        deleteBtn.classList.remove("hidden");
+        saveBtn.disabled = false;
+        setTimeout(closeModal, 1500);
+      })
+      .catch(err => {
+        statusBox.className = "validation-status-box error";
+        statusBox.textContent = `❌ 検証エラー: ${err.message}`;
+        saveBtn.disabled = false;
+      });
+  });
+
+  // 初回起動時のチェック
+  const savedKey = localStorage.getItem("gemini_api_key");
+  if (!savedKey) {
+    setTimeout(openModal, 1200); // 起動1.2秒後にガイドを表示
+  }
 }
 
 // ==========================================================================
@@ -1364,4 +1650,7 @@ document.addEventListener("DOMContentLoaded", () => {
   
   // Forms & sliders bindings
   setupEventListeners();
+  
+  // APIキーの初回起動確認とモーダル設定
+  initApiKeyModal();
 });

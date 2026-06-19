@@ -30,6 +30,9 @@
         <span class="logo-sub">// 企業研究と自己分析の統合</span>
       </div>
       <div class="header-actions">
+        <button id="key-config-toggle" class="btn-icon" aria-label="APIキー設定" title="APIキー設定">
+          <i data-lucide="key"></i>
+        </button>
         <button id="theme-toggle" class="btn-icon" aria-label="テーマ切り替え">
           <i data-lucide="moon"></i>
         </button>
@@ -470,6 +473,63 @@
       </button>
     </nav>
 
+  </div>
+
+  <!-- APIキー設定モーダル -->
+  <div id="api-key-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="serif-title"><i data-lucide="key" class="icon-inline"></i> Gemini APIキーの設定</h3>
+        <button id="close-modal-btn" class="btn-icon" aria-label="閉じる"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-intro">本アプリの企業情報要約や相性スコア算出機能を使用するには、無料の <strong>Gemini APIキー</strong> が必要です（1分で取得可能です）。</p>
+        
+        <div class="guide-steps">
+          <div class="step-item">
+            <span class="step-num">1</span>
+            <div class="step-text">
+              下のボタンから Google AI Studio を開きます（Googleアカウントでのログインが必要です）。
+              <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" class="btn-editorial secondary mini-btn" style="margin-top: 0.5rem; display: inline-flex;">
+                <i data-lucide="external-link"></i> <span>Google AI Studioを開く</span>
+              </a>
+            </div>
+          </div>
+          <div class="step-item">
+            <span class="step-num">2</span>
+            <div class="step-text">画面左上の青い「Create API key」ボタンを押し、表示されたAPIキー文字列をコピーします。</div>
+          </div>
+          <div class="step-item">
+            <span class="step-num">3</span>
+            <div class="step-text">コピーしたキーを下の入力欄に貼り付け、「検証して保存」を押してください。</div>
+          </div>
+        </div>
+
+        <div class="security-note">
+          <i data-lucide="shield-check" class="icon-secure"></i>
+          <p><strong>安全性と無料についての保証</strong><br>
+          Google AI Studio の個人利用枠は完全に無料です。また、入力されたAPIキーはご自身のブラウザの localStorage にのみ保存され、開発者や外部のサーバーへ送信されることは一切ありません。</p>
+        </div>
+
+        <form id="api-key-form" class="modal-form">
+          <div class="textarea-group">
+            <label for="input-api-key" class="label-editorial">Gemini APIキー (AIzaSy...)</label>
+            <input type="password" id="input-api-key" placeholder="AIzaSyから始まるキーを入力してください" required class="input-editorial">
+          </div>
+          <div id="key-validation-status" class="validation-status-box hidden">
+            <!-- 検証ステータスを動的に挿入 -->
+          </div>
+          <div class="modal-actions">
+            <button type="button" id="delete-api-key-btn" class="btn-editorial secondary hidden">
+              <i data-lucide="trash-2"></i> キーを削除
+            </button>
+            <button type="submit" id="save-api-key-btn" class="btn-editorial primary">
+              <i data-lucide="check"></i> 検証して保存
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>

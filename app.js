@@ -1517,18 +1517,25 @@ async function validateApiKey(key) {
       })
     });
     
+    const resText = await response.text();
+    let resData;
+    try {
+      resData = JSON.parse(resText);
+    } catch (e) {
+      throw new Error("APIからの応答が有効なJSONではありません。ネットワーク接続やAPIキーを確認してください。");
+    }
+
     if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error?.message || "接続エラーまたは無効なキーです。");
+      throw new Error(resData.error?.message || "接続エラーまたは無効なキーです。");
     }
     
-    const data = await response.json();
     return true;
   } catch (error) {
     console.error("API Key Verification Failed:", error);
     throw error;
   }
 }
+
 
 // モーダルの挙動制御・初回セットアップガイド
 function initApiKeyModal() {

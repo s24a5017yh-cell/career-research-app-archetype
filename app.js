@@ -1302,106 +1302,70 @@ function setupEventListeners() {
     const submitBtn = document.querySelector("#url-collect-form button[type='submit']");
     submitBtn.disabled = true;
 
-    // 1. CORS回避のため、ローカルのスクレイパーサーバーにリクエストして本文と一次情報を取得
-    fetch("/api/scrape", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ url, securityCode })
-    })
-    .then(response => {
-      if (!response.ok) {
-        return response.json().then(err => {
-          throw new Error(err.error || "データのスクレイピングに失敗しました。");
-        });
-      }
-      return response.json();
-    })
-    .then(data => {
-      // 2. 取得したテキストデータを元に、ブラウザから直接 Gemini API を呼び出す
-      return analyzeWithGeminiDirect(name, url, data.sourceText, data.scrapedMetrics, apiKey)
-        .then(aiAnalysis => {
-          const scrapedMetrics = data.scrapedMetrics || { financials: { sales: [] }, competitors: { names: [], shares: [] } };
-          
-          // スクレイピングで取得した確実な一次情報を、AIの出力より優先してマージ
-          const finalMetrics = {
-            turnover: scrapedMetrics.turnover || aiAnalysis.metrics.turnover || null,
-            tenure: scrapedMetrics.tenure || aiAnalysis.metrics.tenure || null,
-            age: scrapedMetrics.age || aiAnalysis.metrics.age || null,
-            genderRatio: scrapedMetrics.genderRatio || aiAnalysis.metrics.genderRatio || null,
-            salary: scrapedMetrics.salary || aiAnalysis.metrics.salary || null
-          };
+    // サーバーを通さず、ブラウザから直接 Gemini API を呼び出して要約データを取得
+    analyzeWithGeminiDirect(name, url, securityCode, apiKey)
+      .then(aiAnalysis => {
+        // 各種データがnullの場合はデフォルト値を設定
+        const finalMetrics = {
+          turnover: aiAnalysis.metrics.turnover || "データなし",
+          tenure: aiAnalysis.metrics.tenure || "データなし",
+          age: aiAnalysis.metrics.age || "データなし",
+          genderRatio: aiAnalysis.metrics.genderRatio || "データなし",
+          salary: aiAnalysis.metrics.salary || "データなし",
+          oneLiner: aiAnalysis.metrics.oneLiner || `${name}の企業研究情報。`
+        };
 
-          // 一言要約
-          let oneLiner = `${name}の企業研究情報。`;
-          if (scrapedMetrics.financials && scrapedMetrics.financials.sales && scrapedMetrics.financials.sales.length > 0) {
-            const sales = scrapedMetrics.financials.sales;
-            const latestSales = sales[sales.length - 1];
-            oneLiner = `直近売上高 ${latestSales}億円（一次情報源より取得）。`;
-          } else if (finalMetrics.salary) {
-            oneLiner = `平均年間給与 ${finalMetrics.salary}（一次情報源より取得）。`;
-          }
+        const newCompany = {
+          id: `custom-${Math.random().toString(36).substr(2, 9)}`,
+          name: name,
+          industry: securityCode ? "上場企業" : "新興企業 / その他",
+          url: url,
+          summary3: aiAnalysis.summary3,
+          fullSummary: aiAnalysis.fullSummary,
+          idealCandidate: aiAnalysis.idealCandidate,
+          values: aiAnalysis.values,
+          metrics: finalMetrics,
+          financials: aiAnalysis.financials && aiAnalysis.financials.years && aiAnalysis.financials.years.length > 0 ? aiAnalysis.financials : {
+            years: ["データなし"],
+            sales: [0],
+            profit: [0]
+          },
+          competitors: aiAnalysis.competitors && aiAnalysis.competitors.names && aiAnalysis.competitors.names.length > 0 ? aiAnalysis.competitors : {
+            names: [name],
+            shares: [0]
+          },
+          sources: aiAnalysis.sources,
+          isRealData: true
+        };
 
-          const newCompany = {
-            id: `custom-${Math.random().toString(36).substr(2, 9)}`,
-            name: name,
-            industry: securityCode ? "上場企業" : "新興企業 / その他",
-            url: url,
-            summary3: aiAnalysis.summary3,
-            fullSummary: aiAnalysis.fullSummary,
-            idealCandidate: aiAnalysis.idealCandidate,
-            values: aiAnalysis.values,
-            metrics: {
-              turnover: finalMetrics.turnover,
-              tenure: finalMetrics.tenure,
-              age: finalMetrics.age,
-              genderRatio: finalMetrics.genderRatio,
-              salary: finalMetrics.salary,
-              oneLiner: oneLiner
-            },
-            financials: scrapedMetrics.financials && scrapedMetrics.financials.years && scrapedMetrics.financials.years.length > 0 ? scrapedMetrics.financials : {
-              years: ["データなし"],
-              sales: [0],
-              profit: [0]
-            },
-            competitors: scrapedMetrics.financials && scrapedMetrics.financials.years && scrapedMetrics.financials.years.length > 0 ? scrapedMetrics.competitors : {
-              names: [name],
-              shares: [0]
-            },
-            sources: aiAnalysis.sources,
-            isRealData: true
-          };
+        state.companies.push(newCompany);
+        state.myNotes[newCompany.id] = {
+          status: "検討中",
+          rating: "3",
+          feelings: "",
+          ob: "",
+          briefing: "",
+          schedules: []
+        };
 
-          state.companies.push(newCompany);
-          state.myNotes[newCompany.id] = {
-            status: "検討中",
-            rating: "3",
-            feelings: "",
-            ob: "",
-            briefing: "",
-            schedules: []
-          };
+        saveStateToLocalStorage();
+        
+        document.getElementById("collect-company-name").value = "";
+        document.getElementById("collect-company-url").value = "";
+        if (codeEl) codeEl.value = "";
+        
+        loadingEl.classList.add("hidden");
+        submitBtn.disabled = false;
 
-          saveStateToLocalStorage();
-          
-          document.getElementById("collect-company-name").value = "";
-          document.getElementById("collect-company-url").value = "";
-          if (codeEl) codeEl.value = "";
-          
-          loadingEl.classList.add("hidden");
-          submitBtn.disabled = false;
-
-          renderCompanyCards();
-          alert(`「${name}」の実データ取得およびAI要約が完了しました！`);
-        });
-    })
-    .catch(error => {
-      console.error(error);
-      loadingEl.classList.add("hidden");
-      submitBtn.disabled = false;
-      alert(`エラーが発生しました: ${error.message}\n\n※ローカルサーバーが起動していること、および有効なAPIキーが設定されていることを確認してください。`);
-    });
+        renderCompanyCards();
+        alert(`「${name}」のAI解析および要約データの作成が完了しました！`);
+      })
+      .catch(error => {
+        console.error(error);
+        loadingEl.classList.add("hidden");
+        submitBtn.disabled = false;
+        alert(`エラーが発生しました: ${error.message}\n\n※APIキーが有効であるか、またはネットワーク環境を確認してください。`);
+      });
   });
 }
 
@@ -1440,9 +1404,27 @@ const geminiJsonSchema = {
         tenure: { type: "STRING", description: "平均勤続年数 (例: '14.5年')。記載がない場合は null にすること。" },
         age: { type: "STRING", description: "平均年齢 (例: '38.2歳')。記載がない場合は null にすること。" },
         genderRatio: { type: "STRING", description: "女性比率 (例: '38%')。記載がない場合は null にすること。" },
-        salary: { type: "STRING", description: "平均年間給与 (例: '895万円')。記載がない場合は null にすること。" }
+        salary: { type: "STRING", description: "平均年間給与 (例: '895万円')。記載がない場合は null にすること。" },
+        oneLiner: { type: "STRING", description: "数字が苦手な人向けの一言要約。例：『業界2位、3年で売上1.5倍。』" }
       },
-      required: ["turnover", "tenure", "age", "genderRatio", "salary"]
+      required: ["turnover", "tenure", "age", "genderRatio", "salary", "oneLiner"]
+    },
+    financials: {
+      type: "OBJECT",
+      properties: {
+        years: { type: "ARRAY", items: { type: "STRING" }, description: "過去3〜5年分の決算期 (例: ['2022', '2023', '2024', '2025', '2026 (見込)'])。データがない場合は空の配列にしてください。" },
+        sales: { type: "ARRAY", items: { type: "NUMBER" }, description: "各決算期の売上高（単位: 億円）。データがない場合は空の配列にしてください。" },
+        profit: { type: "ARRAY", items: { type: "NUMBER" }, description: "各決算期の営業利益（単位: 億円）。データがない場合は空の配列にしてください。" }
+      },
+      required: ["years", "sales", "profit"]
+    },
+    competitors: {
+      type: "OBJECT",
+      properties: {
+        names: { type: "ARRAY", items: { type: "STRING" }, description: "競合企業名リスト (競合他社3社と本企業名を含む最大4社)。データがない場合は本企業名のみにしてください。" },
+        shares: { type: "ARRAY", items: { type: "NUMBER" }, description: "それぞれの企業の最新の売上高（単位: 億円）。データがない場合は [0] にしてください。" }
+      },
+      required: ["names", "shares"]
     },
     sources: {
       type: "OBJECT",
@@ -1455,29 +1437,24 @@ const geminiJsonSchema = {
       required: ["summary3", "fullSummary", "idealCandidate", "metrics"]
     }
   },
-  required: ["summary3", "fullSummary", "idealCandidate", "values", "metrics", "sources"]
+  required: ["summary3", "fullSummary", "idealCandidate", "values", "metrics", "financials", "competitors", "sources"]
 };
 
 // ブラウザから直接 Gemini API を呼び出す関数
-async function analyzeWithGeminiDirect(companyName, url, sourceText, scrapedMetrics, apiKey) {
-  const scrapedContext = JSON.stringify(scrapedMetrics, null, 2);
+async function analyzeWithGeminiDirect(companyName, url, securityCode, apiKey) {
   const prompt = `
 あなたは企業情報の客観的分析を行う専門AIです。
-入力された企業の「ソーステキスト」および「すでに判明している一次情報数値」をもとに、厳格に事実のみに基づいた要約を作成してください。
+対象となる企業の情報（および証券コードや参考URL）をもとに、あなたの持つ知識および最新のIR資料・有価証券報告書のナレッジベースから、事実に基づいた要約を作成してください。
 
 【対象企業】: ${companyName}
-【ソースURL】: ${url}
-【すでに判明している一次情報数値（絶対に優先し、捏造しないこと）】:
-${scrapedContext}
-
-【ソーステキスト】:
-${sourceText}
+【参考URL】: ${url || "指定なし"}
+【証券コード】: ${securityCode || "指定なし"}
 
 【厳格な遵守ルール】:
-1. あなたの事前知識や憶測から、数値を絶対に推測・ハルシネーション（捏造）しないでください。
-2. 平均年収、平均勤続年数、平均年齢、離職率、売上高などの数値情報は、ソーステキストまたは「判明している一次情報数値」に明記されている場合のみ出力してください。記載がない項目は、絶対に推測せず 'null' または記載なしにしてください。
+1. 平均年収、平均勤続年数、平均年齢、離職率、売上高などの数値情報は、確実性の高い一次情報（有価証券報告書や公式発表）の知識のみを出力し、不確実な数値や憶測は絶対に含めず 'null' にしてください。
+2. 過去3〜5年分の売上高・営業利益の推移データ（単位: 億円）、競合他社比較データ（単位: 億円）も、信頼性の高い決算情報に基づいて出力してください。正確な数値がわからない場合は、yearsを ["データなし"]、salesを [0]、profitを [0] のように空またはゼロで構成してください。
 3. 事実（実際に確認された数値や実績）と、推測（会社の目指すビジョンや将来の予測）を明確に区別し、曖昧な箇所は「AIによる推測（要確認）」であることを付記してください。
-4. 各要約、求める人材像、指標など、あらゆる記述箇所に対して、元の情報の出典（例: 『有価証券報告書 p.12』『公式サイト〇〇ページ』またはURL）を紐付けて出力してください。
+4. 各要約、求める人材像、指標など、あらゆる記述箇所に対して、信頼できる出典元（例: 『有価証券報告書 (2025年版)』、『〇〇社新卒採用サイト』等）を sources オブジェクトとして紐付けて出力してください。
 5. 出力は指定されたJSONスキーマに完全に準拠させ、プレーンなJSONオブジェクトとして返却してください。マークダウンブロック (\`\`\`json ...) は不要です。
 `;
 
@@ -1500,12 +1477,18 @@ ${sourceText}
       })
     });
 
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error?.message || "Gemini APIからのエラー応答を受信しました。");
+    const resText = await response.text();
+    let resData;
+    try {
+      resData = JSON.parse(resText);
+    } catch (e) {
+      throw new Error("Gemini APIからの応答が有効なJSONフォーマットではありません。APIリクエストの制限に達したか、無効なキーです。");
     }
 
-    const resData = await response.json();
+    if (!response.ok) {
+      throw new Error(resData.error?.message || "Gemini APIからのエラー応答を受信しました。");
+    }
+
     const candidates = resData?.candidates;
     if (!candidates || candidates.length === 0) {
       throw new Error("Gemini API から有効な応答が得られませんでした。");
@@ -1519,6 +1502,7 @@ ${sourceText}
     throw new Error(`AI要約の生成に失敗しました: ${error.message}`);
   }
 }
+
 
 // APIキーの有効性検証を行う関数
 async function validateApiKey(key) {

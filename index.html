@@ -74,18 +74,19 @@
         <div class="search-collect-card">
           <div class="card-headline">
             <h3>新規企業データの収集・要約</h3>
-            <p>企業サイトやIR資料のURLを入力すると、AIが情報を収集・解析して追加します。上場企業は証券コード（4桁）を入力すると、有価証券報告書等の一次情報から財務・組織データを直接取得します。</p>
+            <p>企業名と証券コード（4桁）を入力すると、Gemini APIが最新のIR情報や有価証券報告書の知識を元に、財務・組織指標や要約を自動生成します（外部URLへの直接通信は行いません）。</p>
           </div>
           <form id="url-collect-form" class="collect-form">
             <div class="input-group-row">
               <input type="text" id="collect-company-name" placeholder="企業名（例: トヨタ自動車）" required class="input-editorial">
-              <input type="url" id="collect-company-url" placeholder="公式サイト/IR資料等のURL" required class="input-editorial">
+              <input type="url" id="collect-company-url" placeholder="公式サイト等のURL（任意・参考用）" class="input-editorial">
               <input type="text" id="collect-company-code" placeholder="証券コード4桁（任意）" class="input-editorial" maxlength="4" pattern="\d{4}">
               <button type="submit" class="btn-editorial primary">
                 <i data-lucide="sparkles"></i> <span>解析・追加</span>
               </button>
             </div>
           </form>
+
           <!-- 解析ローディングアニメーション -->
           <div id="collect-loading" class="collect-loading hidden">
             <div class="spinner-editorial"></div>
